@@ -51,7 +51,7 @@ cargo run
 
 In theory, Vulkan seems like the most promising approach for targeting Windows & Linux given how well it works for [generating bitmaps](https://github.com/samizdatco/skia-canvas/blob/gpu/src/gpu/vulkan.rs) and how much less global state it's saddled with compared to GL. However it's also just staggeringly low-level and setting up the necessary graphics pipelines requires a rather deep understanding of its inner workings. The [`skulpin`][skulpin] project has already built a renderer that integrates Vulkin and Skia, but it's currently non-functional on my development machine (a Macintosh) so it's difficult for me to test whether it would be a good solution for the other platforms.
 
-Only the current pre-release version of [`ash`][ash] (the fundamental Vulkan bindings used by most rust projects) work on the Mac so I've attempted to update `skulpin` to work with that. A few releases ago, `skulpin` moved its internals to a much larger (and broader) framework called rafx which was too heavyweight for my purposes, so this directory instead contains a [fork](blob/main/vulkan/skulpin-renderer) of the [last pre-rafx version][skulpin_fork] of `skulpin`.
+Only the current pre-release version of [`ash`][ash] (the fundamental Vulkan bindings used by most rust projects) work on the Mac so I've attempted to update `skulpin` to work with that. A few releases ago, `skulpin` moved its internals to a much larger (and broader) framework called rafx which was too heavyweight for my purposes, so this directory instead contains a [fork](vulkan/skulpin-renderer) of the [last pre-rafx version][skulpin_fork] of `skulpin`.
 
 I've managed to successfully create all basic pieces (instance, device, shaders, swap-chains, etc.) without error, but the rendering pipeline is running into what look like synchronization problems when it actually runs. In particular, an error claiming that it expected a layout of `VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL` but received `VK_IMAGE_LAYOUT_UNDEFINED`. 
 
@@ -76,9 +76,9 @@ Googling for this turns up *many* other people debugging memory barriers that ar
 <img alt="vulkan window not rendering content" src="/vulkan/screenshot.png" width="400">
 
 
-[gl]: blob/main/gl
-[metal]: blob/main/metal
-[vulkan]: blob/main/vulkan
+[gl]: gl
+[metal]: metal
+[vulkan]: vulkan
 [skulpin]: https://github.com/aclysma/skulpin
 [ash]: https://github.com/ash-rs/ash
 [skulpin_fork]: https://github.com/aclysma/skulpin/tree/4a2ae275fc42e9a6fcbf12aa1b9d713c34bc5db2
