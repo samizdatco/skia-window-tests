@@ -1,0 +1,16 @@
+[package]
+name = "mtl-win"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+skia-safe = { version = "0.50.0", features = ["textlayout", "metal"] }
+# winit = '0.26.1'
+winit = { git = 'https://github.com/rust-windowing/winit.git' }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+metal-rs = { package = "metal", version = "0.23.1" }
+objc = "0.2.7"
+cocoa = "0.24.0"
+core-graphics-types = "0.1.1"
+foreign-types-shared = "0.1.1"

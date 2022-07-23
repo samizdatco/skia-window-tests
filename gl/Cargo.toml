@@ -1,0 +1,11 @@
+[package]
+name = "gl-win"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+glutin = "0.28.0"
+gl = { version = "0.14.0" }
+skia-safe = { version = "0.50.0", features = ["textlayout", "gl", "vulkan"] }
+takeable-option = "0.5.0"
+lazy_static = "1.4.0"
