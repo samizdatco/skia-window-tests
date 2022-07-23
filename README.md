@@ -34,9 +34,11 @@ cd gl
 cargo run
 ```
 
-This version uses [`glutin`][glutin] (a wrapper around [`winit`][winit] that handles the creation of OpenGL contexts) and is adapted from the `skia-safe` [`gl-window`][gl_window] example. It runs acceptably when there's only a single window and GL Context, but I've been less successful in attempting to get it to support multiple windows. For that, I adapted the `glutin` [`multiwindow`][gl_multiwindow] example and attempted to slim down its fairly elaborate `ContextTracker` struct (whose main purpose is to ensure that the appropriate GL context is made ‘current’ before being drawn to).
+This version uses [`glutin`][glutin] (a wrapper around [`winit`][winit] that handles the creation of OpenGL contexts) and is adapted from the `skia-safe` [`gl-window`][gl_window] example. It runs acceptably when there's only a single window and GL Context, but I've been less successful in attempting to get it to support multiple windows. 
 
-When first launched, everything seems to be fine—each window is playing its independent animation. But as soon as a window is resized (and needs to [recreate the surface](https://github.com/samizdatco/skia-window-tests/blob/e7f673a70147caee81e8da5d9cd208a508f67923/gl/src/main.rs#L125-L159) it's drawing to) it's clear that the different windows’s contexts are not being correctly made ‘current’/‘non-current’ by the [`get_current`](https://github.com/samizdatco/skia-window-tests/blob/e7f673a70147caee81e8da5d9cd208a508f67923/gl/src/contexts.rs#L108) helper. As you resize one window, content from other windows starts overdrawing it.
+For that, I adapted the `glutin` [`multiwindow`][gl_multiwindow] example and attempted to slim down its fairly elaborate [`ContextTracker`][gl_context_tracker] module (whose main purpose is to ensure that the appropriate GL context is made ‘current’ before being drawn to).
+
+When first launched, everything seems to be fine—each window is playing its independent animation. But as soon as a window is resized (and needs to [recreate the surface](https://github.com/samizdatco/skia-window-tests/blob/e7f673a70147caee81e8da5d9cd208a508f67923/gl/src/main.rs#L125-L159) it's drawing to) it's clear that the different windows’ contexts are not being correctly made ‘current’/‘non-current’ by the [`get_current`](https://github.com/samizdatco/skia-window-tests/blob/e7f673a70147caee81e8da5d9cd208a508f67923/gl/src/contexts.rs#L108) helper. As you resize one window, content from other windows starts overdrawing it.
 
 A related bug can be triggered by closing a window: you'll see the content of that window ‘hop’ to one of the remaining windows.
 
@@ -49,11 +51,11 @@ cd vulkan
 cargo run
 ```
 
-In theory, Vulkan seems like the most promising approach for targeting Windows & Linux given how well it works for [generating bitmaps](https://github.com/samizdatco/skia-canvas/blob/gpu/src/gpu/vulkan.rs) and how much less global state it's saddled with compared to GL. However it's also just staggeringly low-level and setting up the necessary graphics pipelines requires a rather deep understanding of its inner workings. The [`skulpin`][skulpin] project has already built a renderer that integrates Vulkin and Skia, but it's currently non-functional on my development machine (a Macintosh) so it's difficult for me to test whether it would be a good solution for the other platforms.
+In theory, Vulkan seems like the most promising approach for targeting Windows & Linux given how well it works for [generating bitmaps](https://github.com/samizdatco/skia-canvas/blob/gpu/src/gpu/vulkan.rs) and how much less global state it's saddled with compared to GL. However it's also just staggeringly low-level and setting up the necessary graphics pipelines requires a rather deep understanding of its inner workings. The [`skulpin`][skulpin] project has already built a renderer that integrates Vulkan and Skia, but it's currently non-functional on my development machine (a Macintosh) so it's difficult for me to test whether it would be a good solution for the other platforms.
 
-Only the current pre-release version of [`ash`][ash] (the fundamental Vulkan bindings used by most rust projects) work on the Mac so I've attempted to update `skulpin` to work with that. A few releases ago, `skulpin` moved its internals to a much larger (and broader) framework called rafx which was too heavyweight for my purposes, so this directory instead contains a [fork](vulkan/skulpin-renderer) of the [last pre-rafx version][skulpin_fork] of `skulpin`.
+Only the current pre-release version of [`ash`][ash] (the Vulkan bindings used by most rust projects) runs on ARM Macs so I've attempted to update `skulpin` to work with that. A few releases ago, `skulpin` moved its internals to a much larger (and broader) framework called rafx which was too heavyweight for my purposes, so this directory instead contains a [fork](vulkan/skulpin-renderer) of the [last pre-rafx version][skulpin_fork] of `skulpin`.
 
-I've managed to successfully create all basic pieces (instance, device, shaders, swap-chains, etc.) without error, but the rendering pipeline is running into what look like synchronization problems when it actually runs. In particular, an error claiming that it expected a layout of `VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL` but received `VK_IMAGE_LAYOUT_UNDEFINED`. 
+I've managed to successfully create all the basic pieces (instance, device, shaders, swap-chains, etc.) without error, but the rendering pipeline is running into what look like synchronization problems when it actually runs. In particular, an error claiming that it expected a layout of `VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL` but received `VK_IMAGE_LAYOUT_UNDEFINED`. 
 
 ```
 Setting up skia backend context with queue family index 0
@@ -71,7 +73,7 @@ Validation Error: [ UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout ] Obj
 Validation Error: [ UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout ] Object 0: handle = 0x136f29e58, type = VK_OBJECT_TYPE_COMMAND_BUFFER; | MessageID = 0x4dae5635 | vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] command buffer VkCommandBuffer 0x136f29e58[] expects VkImage 0xa808d50000000033[] (subresource: aspectMask 0x1 array layer 0, mip level 0) to be in layout VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL--instead, current layout is VK_IMAGE_LAYOUT_UNDEFINED.
 ```
 
-Googling for this turns up *many* other people debugging memory barriers that aren't correctly balanced, but I'm reaching the limit of my current understanding of Vulkan as I try to figure out what's going wrong. If you've got a better sense of how this should be working, start by taking a look at the contents of [`skia_renderpass.rs`](https://github.com/samizdatco/skia-window-tests/blob/main/vulkan/skulpin-renderer/src/skia_renderpass.rs) and the [Renderer](https://github.com/samizdatco/skia-window-tests/blob/e7f673a70147caee81e8da5d9cd208a508f67923/vulkan/skulpin-renderer/src/renderer.rs#L215) struct that [invokes](https://github.com/samizdatco/skia-window-tests/blob/e7f673a70147caee81e8da5d9cd208a508f67923/vulkan/skulpin-renderer/src/renderer.rs#L439) it.
+Googling for this turns up *many* other people debugging memory barriers that aren't correctly balanced, but I'm reaching the limit of my current understanding of Vulkan as I try to figure out what's going wrong. If you've got a better sense of how this should be working, start by taking a look at the contents of [`skia_renderpass.rs`](https://github.com/samizdatco/skia-window-tests/blob/main/vulkan/skulpin-renderer/src/skia_renderpass.rs) and the [Renderer](https://github.com/samizdatco/skia-window-tests/blob/e7f673a70147caee81e8da5d9cd208a508f67923/vulkan/skulpin-renderer/src/renderer.rs#L215) struct that [invokes](https://github.com/samizdatco/skia-window-tests/blob/e7f673a70147caee81e8da5d9cd208a508f67923/vulkan/skulpin-renderer/src/renderer.rs#L439) it and let me know if you see anything suspicious…
 
 <img alt="vulkan window not rendering content" src="/vulkan/screenshot.png" width="400">
 
@@ -87,5 +89,6 @@ Googling for this turns up *many* other people debugging memory barriers that ar
 [gl_window]: https://github.com/rust-skia/rust-skia/blob/master/skia-safe/examples/gl-window/main.rs
 [gl_multiwindow]: https://github.com/rust-windowing/glutin/blob/master/glutin_examples/examples/multiwindow.rs
 [gl_deprecated]: https://arstechnica.com/features/2018/09/macos-10-14-mojave-the-ars-technica-review/12/
+[gl_context_tracker]: https://github.com/rust-windowing/glutin/blob/4e55db7e65a7bbd08d32a5b26fd7827b4aaf4211/glutin_examples/examples/support/mod.rs#L134
 [glutin]: https://github.com/rust-windowing/glutin
 [winit]: https://github.com/rust-windowing/winit
