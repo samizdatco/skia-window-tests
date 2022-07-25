@@ -13,7 +13,7 @@ It's tempting to try to use OpenGL for all three platforms, but macOS support ha
 
 ### Current Status
 
-The example in the [`metal`][metal] subdirectory seems to be fully functional, and, if nothing else, is a good demonstration of what the others are trying to accomplish. The [`gl`][gl] and [`vulkan`][vulkan] subprojects are both broken in different ways (detailed below) and I could really use the help of folks with more GPU experience as I try to get one or both of them running.
+The example in the [`metal`][metal] subdirectory seems to be fully functional, and, if nothing else, is a good demonstration of what the others are trying to accomplish. The [`vulkan`][vulkan] subproject has also been confirmed to work on Macs that have installed the MoltenVK libraries, but still needs to be tested on Linux & Windows. The [`gl`][gl] subproject is still having problems with crosstalk between windows (detailed below) and I could really use the help of folks with more GPU experience as I try to get that sorted out.
 
 ## [Metal][metal]
 
@@ -24,8 +24,30 @@ cargo run
 
 This version actually works! The windows can be resized, minimized, maximized, and closed without interfering with one another. When the final window is closed, the application terminates.
 
-
 <img alt="metal windows" src="/metal/screenshot.png" width="400">
+
+## [Vulkan][vulkan]
+
+```console
+cd vulkan
+cargo run
+```
+
+This is now running properly on the Mac (which is useful for development purposes even if it won't be actively used in `skia-canvas`). The trick is to use an older version of the ‘MoltenVK’ [Vulkan SDK][molten_sdk] on macOS since the 1.3.x lineage is either tripping up Skia or the Rafx library that's bridging between Skia and the display. I had luck with the [version 1.2.189 installer][molten_sdk_download].
+
+After running the installer, the easiest way to make it visible to the dynamic linker is to run the `install_vulkan.py` script in the sdk folder. You can also leave everything as-is and set some environment variables along the lines of:
+```sh
+export VULKAN_SDK="/path/to/vulkan-sdk/macOS"
+export DYLD_LIBRARY_PATH="$VULKAN_SDK/lib:$DYLD_LIBRARY_PATH"
+export VK_ICD_FILENAMES="$VULKAN_SDK/share/vulkan/icd.d/MoltenVK_icd.json"
+export VK_LAYER_PATH="$VULKAN_SDK/share/vulkan/explicit_layer.d"
+export PATH="$VULKAN_SDK/bin:$PATH
+```
+
+On Linux & Windows this isn't necessary but I could use some feedback on what actually **is** required to get the demo to run. This article has tips for [setting up Vulkan on linux](https://linuxconfig.org/install-and-test-vulkan-on-linux), and my understanding is that Windows graphics card drivers include everything necessary, but confirmation on both these fronts would be quite helpful.
+
+
+<img alt="vulkan working like a charm" src="/vulkan/screenshot.png" width="400">
 
 ## [OpenGL][gl]
 
@@ -34,7 +56,7 @@ cd gl
 cargo run
 ```
 
-This version uses [`glutin`][glutin] (a wrapper around [`winit`][winit] that handles the creation of OpenGL contexts) and is adapted from the `skia-safe` [`gl-window`][gl_window] example. It runs acceptably when there's only a single window and GL Context, but I've been less successful in attempting to get it to support multiple windows. 
+This version uses [`glutin`][glutin] (a wrapper around [`winit`][winit] that handles the creation of OpenGL contexts) and is adapted from the `skia-safe` [`gl-window`][gl_window] example. It runs acceptably when there's only a single window and GL Context, but I've been less successful in attempting to get it to support multiple windows.
 
 For that, I adapted the `glutin` [`multiwindow`][gl_multiwindow] example and attempted to slim down its fairly elaborate [`ContextTracker`][gl_context_tracker] module (whose main purpose is to ensure that the appropriate GL context is made ‘current’ before being drawn to).
 
@@ -44,38 +66,6 @@ A related bug can be triggered by closing a window: you'll see the content of th
 
 <img alt="gl windows working at first" src="/gl/screenshot-1.png" width="360">&nbsp;<img alt="gl windows glitching after resize" src="/gl/screenshot-2.png" width="360">
 
-## [Vulkan][vulkan]
-
-```console
-cd vulkan
-cargo run
-```
-
-In theory, Vulkan seems like the most promising approach for targeting Windows & Linux given how well it works for [generating bitmaps](https://github.com/samizdatco/skia-canvas/blob/gpu/src/gpu/vulkan.rs) and how much less global state it's saddled with compared to GL. However it's also just staggeringly low-level and setting up the necessary graphics pipelines requires a rather deep understanding of its inner workings. The [`skulpin`][skulpin] project has already built a renderer that integrates Vulkan and Skia, but it's currently non-functional on my development machine (a Macintosh) so it's difficult for me to test whether it would be a good solution for the other platforms.
-
-Only the current pre-release version of [`ash`][ash] (the Vulkan bindings used by most rust projects) runs on ARM Macs so I've attempted to update `skulpin` to work with that. A few releases ago, `skulpin` moved its internals to a much larger (and broader) framework called rafx which was too heavyweight for my purposes, so this directory instead contains a [fork](vulkan/skulpin-renderer) of the [last pre-rafx version][skulpin_fork] of `skulpin`.
-
-I've managed to successfully create all the basic pieces (instance, device, shaders, swap-chains, etc.) without error, but the rendering pipeline is running into what look like synchronization problems when it actually runs. In particular, an error claiming that it expected a layout of `VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL` but received `VK_IMAGE_LAYOUT_UNDEFINED`. 
-
-```
-Setting up skia backend context with queue family index 0
-Surface format: SurfaceFormatKHR { format: B8G8R8A8_UNORM, color_space: SRGB_NONLINEAR }
-Swapchain extents chosen by surface capabilities (800 600)
-Extents: Extent2D { width: 800, height: 600 }
-Available present modes: [FIFO, IMMEDIATE]
-Preferred present modes: [Fifo]
-Present mode: FIFO
-Created 3 swapchain images with initial size (800, 600).
-Creating command pool with queue family index 0
-Create skia surfaces with extent: Extent2D { width: 800, height: 600 }
-Validation Error: [ UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout ] Object 0: handle = 0x136f29bd8, type = VK_OBJECT_TYPE_COMMAND_BUFFER; | MessageID = 0x4dae5635 | vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] command buffer VkCommandBuffer 0x136f29bd8[] expects VkImage 0x3a6cbb0000000025[] (subresource: aspectMask 0x1 array layer 0, mip level 0) to be in layout VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL--instead, current layout is VK_IMAGE_LAYOUT_UNDEFINED.
-Validation Error: [ UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout ] Object 0: handle = 0x136f29d18, type = VK_OBJECT_TYPE_COMMAND_BUFFER; | MessageID = 0x4dae5635 | vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] command buffer VkCommandBuffer 0x136f29d18[] expects VkImage 0xa43473000000002d[] (subresource: aspectMask 0x1 array layer 0, mip level 0) to be in layout VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL--instead, current layout is VK_IMAGE_LAYOUT_UNDEFINED.
-Validation Error: [ UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout ] Object 0: handle = 0x136f29e58, type = VK_OBJECT_TYPE_COMMAND_BUFFER; | MessageID = 0x4dae5635 | vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] command buffer VkCommandBuffer 0x136f29e58[] expects VkImage 0xa808d50000000033[] (subresource: aspectMask 0x1 array layer 0, mip level 0) to be in layout VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL--instead, current layout is VK_IMAGE_LAYOUT_UNDEFINED.
-```
-
-Googling for this turns up *many* other people debugging memory barriers that aren't correctly balanced, but I'm reaching the limit of my current understanding of Vulkan as I try to figure out what's going wrong. If you've got a better sense of how this should be working, start by taking a look at the contents of [`skia_renderpass.rs`](https://github.com/samizdatco/skia-window-tests/blob/main/vulkan/skulpin-renderer/src/skia_renderpass.rs) and the [Renderer](https://github.com/samizdatco/skia-window-tests/blob/e7f673a70147caee81e8da5d9cd208a508f67923/vulkan/skulpin-renderer/src/renderer.rs#L215) struct that [invokes](https://github.com/samizdatco/skia-window-tests/blob/e7f673a70147caee81e8da5d9cd208a508f67923/vulkan/skulpin-renderer/src/renderer.rs#L439) it and let me know if you see anything suspicious…
-
-<img alt="vulkan window not rendering content" src="/vulkan/screenshot.png" width="400">
 
 
 [gl]: gl
@@ -86,6 +76,8 @@ Googling for this turns up *many* other people debugging memory barriers that ar
 [skulpin_fork]: https://github.com/aclysma/skulpin/tree/4a2ae275fc42e9a6fcbf12aa1b9d713c34bc5db2
 [skia_canvas]: https://github.com/samizdatco/skia-canvas
 [rust_skia]: https://github.com/rust-skia/rust-skia
+[molten_sdk]: https://vulkan.lunarg.com/sdk/home#mac
+[molten_sdk_download]: https://sdk.lunarg.com/sdk/download/1.2.189.0/mac/vulkansdk-macos-1.2.189.0.dmg
 [gl_window]: https://github.com/rust-skia/rust-skia/blob/master/skia-safe/examples/gl-window/main.rs
 [gl_multiwindow]: https://github.com/rust-windowing/glutin/blob/master/glutin_examples/examples/multiwindow.rs
 [gl_deprecated]: https://arstechnica.com/features/2018/09/macos-10-14-mojave-the-ars-technica-review/12/
